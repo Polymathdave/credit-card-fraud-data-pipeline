@@ -1,33 +1,79 @@
-# Credit Card Fraud Detection: Exploratory Data Analysis
+# Credit Card Fraud: Data Pipeline & Analysis
 
+[![tests](https://github.com/Polymathdave/credit-card-fraud-data-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/Polymathdave/credit-card-fraud-data-pipeline/actions/workflows/tests.yml)
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Pandas](https://img.shields.io/badge/Pandas-150458?style=for-the-badge&logo=pandas&logoColor=white)
-![NumPy](https://img.shields.io/badge/NumPy-013243?style=for-the-badge&logo=numpy&logoColor=white)
-![SciPy](https://img.shields.io/badge/SciPy-8CAAE6?style=for-the-badge&logo=scipy&logoColor=white)
-![Jupyter](https://img.shields.io/badge/Jupyter-F37626?style=for-the-badge&logo=jupyter&logoColor=white)
+![Parquet](https://img.shields.io/badge/Apache%20Parquet-50ABF1?style=for-the-badge)
+![Pytest](https://img.shields.io/badge/Pytest-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)
 
-An in-depth exploratory analysis of a credit card transaction dataset, done to prepare for a fraud detection model. The aim is to understand the data well enough to make sound pre-processing and modelling decisions.
+A batch **ETL pipeline** that turns raw credit card transaction exports into a validated, analytics-ready **Parquet** dataset with an automated **data quality report**. It is paired with an exploratory analysis of the data that informed the pipeline's validation rules and derived features.
 
-## 🔍 What the analysis covers
-- **Data inspection & quality**: schema, descriptive statistics and missing-value checks.
-- **Class imbalance**: how rare fraud is compared with legitimate transactions, and why this calls for imbalance-handling techniques (SMOTE, undersampling or cost-sensitive learning).
-- **Time patterns**: transaction volume and fraud by hour across the 48-hour window.
-- **Transaction amounts**: histograms, boxplots and violin plots comparing fraud and legitimate amounts, plus a Mann-Whitney U test.
-- **Feature analysis**: distributions of the anonymised PCA features (V1–V28), a correlation matrix, and the features most correlated with fraud.
-- **Findings**: each section ends with written findings that feed into the modelling and pre-processing choices.
-
-## 📁 Repository structure
+## 🏗️ Architecture
 ```
-├── implementation.ipynb   # Full EDA notebook with charts and findings
-└── README.md
+ Raw export (.xlsx / .csv)
+          │
+          ▼
+ ┌──────────────┐   read CSV or Excel
+ │   EXTRACT    │
+ └──────┬───────┘
+        ▼
+ ┌──────────────┐   schema · nulls · duplicates · domain rules
+ │   VALIDATE   │──► quality_report.json (pass / fail per check)
+ └──────┬───────┘
+        ▼
+ ┌──────────────┐   drop invalid rows, dedupe, type casting,
+ │  TRANSFORM   │   derive hour_of_day, day, amount_bucket
+ └──────┬───────┘
+        ▼
+ ┌──────────────┐
+ │     LOAD     │──► curated/transactions/day=0|1/*.parquet
+ └──────────────┘
 ```
 
-## ▶️ How to run
+## ✅ Data quality checks
+| Check | Rule | On failure |
+|-------|------|------------|
+| Schema | All 31 expected columns present (`Time`, `V1`–`V28`, `Amount`, `Class`) | Run stops, report written |
+| Nulls | No nulls in curated columns | Flagged in report |
+| Duplicates | ≤ 1% duplicate rows | Flagged in report |
+| Domain | `Amount ≥ 0`, `Class ∈ {0, 1}` | Flagged in report |
+
+The run exits with a non-zero code when any check fails, so a scheduler or CI job can alert on it.
+
+## 📁 Project structure
+```
+├── pipeline/
+│   ├── config.py      # Expected schema and quality thresholds
+│   ├── extract.py     # Read raw CSV / Excel
+│   ├── quality.py     # Data quality checks
+│   ├── transform.py   # Cleaning and feature derivation
+│   ├── load.py        # Partitioned Parquet + JSON run report
+│   └── run.py         # Pipeline entry point
+├── tests/             # Pytest unit tests (run in CI)
+├── .github/workflows/ # GitHub Actions: tests on every push
+├── implementation.ipynb  # Exploratory data analysis
+└── requirements.txt
+```
+
+## ▶️ Run it
 ```bash
-pip install pandas numpy matplotlib seaborn scipy openpyxl jupyter
-jupyter notebook implementation.ipynb
+pip install -r requirements.txt
+python -m pipeline.run --source creditcard.xlsx --target output/
+pytest -q tests
 ```
-> The notebook expects the dataset as `creditcard.xlsx` in the project folder.
+Output:
+```
+output/
+├── curated/transactions/day=0/…parquet
+├── curated/transactions/day=1/…parquet
+└── quality_report.json
+```
 
-## 🧰 Skills demonstrated
-Exploratory data analysis · Imbalanced data · Statistical testing · Feature analysis · Data visualisation
+## 🔍 Exploratory analysis
+`implementation.ipynb` profiles the dataset before the pipeline was built. It covers class imbalance, fraud by hour across the 48-hour window, amount distributions with a Mann-Whitney U test, and the anonymised PCA features (V1–V28) most correlated with fraud. These findings set the pipeline's validation rules and its derived `hour_of_day` and `amount_bucket` columns.
+
+## 🗺️ Next steps
+- [ ] Port the transform step to PySpark for larger volumes
+- [ ] Load curated data into a warehouse table (e.g. Databricks / Azure SQL)
+- [ ] Schedule with Airflow and alert on failed quality checks

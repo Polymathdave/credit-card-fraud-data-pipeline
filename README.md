@@ -62,7 +62,9 @@ The run exits with a non-zero code when any check fails, so a scheduler or CI jo
 │   ├── transform.py   # Cleaning and feature derivation
 │   ├── load.py        # Partitioned Parquet + JSON run report
 │   ├── run.py         # Pipeline entry point (pandas)
+│   ├── sample_data.py # Synthetic sample generator
 │   └── spark/         # PySpark engine: session, quality, transform, aggregates, run
+├── data/              # Synthetic sample input (same schema as the real data)
 ├── sql/               # Spark SQL for gold tables
 ├── tests/             # Pytest unit tests incl. Spark/pandas parity (run in CI)
 ├── .github/workflows/ # GitHub Actions: tests on every push
@@ -70,18 +72,23 @@ The run exits with a non-zero code when any check fails, so a scheduler or CI jo
 └── requirements.txt
 ```
 
-## ▶️ Run it
+## 🚀 Quickstart
+Works straight after cloning. A synthetic sample file with the real schema is included in `data/`.
 ```bash
+git clone https://github.com/Polymathdave/credit-card-fraud-data-pipeline.git
+cd credit-card-fraud-data-pipeline
 pip install -r requirements.txt
 
-# pandas engine
-python -m pipeline.run --source creditcard.xlsx --target output/
+pytest -q tests                                   # 7 tests, incl. Spark/pandas parity
 
-# PySpark engine (requires Java 17)
-python -m pipeline.spark.run --source creditcard.csv --target output_spark/
-
-pytest -q tests
+python -m pipeline.run       --source data/sample_transactions.csv --target output/        # pandas engine
+python -m pipeline.spark.run --source data/sample_transactions.csv --target output_spark/  # PySpark engine
 ```
+Requirements: Python 3.11+, and Java 17 for the PySpark engine.
+
+To run on the real dataset, pass its path instead (the pandas engine also reads `.xlsx`). To make a bigger sample:
+`python -m pipeline.sample_data --rows 100000 --out data/big_sample.csv`
+
 PySpark output:
 ```
 output_spark/
